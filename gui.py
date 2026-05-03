@@ -4,11 +4,33 @@ import requests
 import zipfile
 import os
 import sys
+import subprocess
 import threading
 import tempfile
+import webbrowser
 
-MODPACK_URL = "https://pub-2259c298a3f444afb40f45083b29b3e0.r2.dev/mods.zip"
+MODPACK_URL = "https://pub-2259c298a3f444afb40f45083b29b3e0.r2.dev/Mods.zip"
 TARGET_VERSION = "26.1.2" # Version of minecraft that autodetect searches for
+
+APP_VERSION = "1.2.0"
+GITHUB_REPO = "ZadenMaestas/AspireMC-Updater"
+
+
+def _get_release_asset_name():
+    if sys.platform == "win32":
+        return "AspireMC-Updater.exe"
+    elif sys.platform == "darwin":
+        return "AspireMC-Updater-macos"
+    else:
+        return "AspireMC-Updater-linux"
+
+
+def _parse_version(v):
+    v = v.lstrip("v").split("-")[0]
+    try:
+        return tuple(int(x) for x in v.split(".")[:3])
+    except ValueError:
+        return (0, 0, 0)
 
 # -------------------------
 # Launcher auto-detection
@@ -138,6 +160,7 @@ class App(tk.Tk):
         self.mod_folder_var.set(saved)
         if not saved:
             self.after(150, self._first_launch)
+        self.after(2000, self._check_for_update_async)
 
     # --- Label-based button (no OS borders) ---
     def _make_btn(self, parent, text, command, bg, hover_bg, font=("Courier New", 10, "bold"), **kw):
@@ -179,7 +202,7 @@ class App(tk.Tk):
         # Subtitle
         tk.Label(
             self,
-            text="Modpack Synchronization Tool",
+            text=f"Modpack Synchronization Tool  •  v{APP_VERSION}",
             font=("Courier New", 9),
             fg=TEXT_GRAY,
             bg=BG_MAIN,
@@ -438,6 +461,86 @@ class App(tk.Tk):
 
         self._log("[OK]    Modpack updated successfully!")
         self.after(0, self._finish, True)
+
+    # --- Self-update ---
+    def _check_for_update_async(self):
+        threading.Thread(target=self._do_update_check, daemon=True).start()
+
+    def _do_update_check(self):
+        try:
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            r = requests.get(url, timeout=10, headers={"Accept": "application/vnd.github+json"})
+            r.raise_for_status()
+            data = r.json()
+            latest = data["tag_name"]
+            if _parse_version(latest) > _parse_version(APP_VERSION):
+                asset_url = None
+                asset_name = _get_release_asset_name()
+                for asset in data.get("assets", []):
+                    if asset["name"] == asset_name:
+                        asset_url = asset["browser_download_url"]
+                        break
+                self.after(0, self._prompt_update, latest.lstrip("v"), asset_url)
+        except Exception:
+            pass
+
+    def _prompt_update(self, latest_version, asset_url):
+        can_auto = getattr(sys, "frozen", False) and asset_url is not None
+        msg = f"Version {latest_version} is available (you have {APP_VERSION}).\n\n"
+        msg += "Update and restart now?" if can_auto else "Open the releases page to download?"
+        if not messagebox.askyesno("Update Available", msg):
+            return
+        if not can_auto:
+            webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases/latest")
+            return
+        threading.Thread(target=self._download_and_apply_update, args=(asset_url,), daemon=True).start()
+
+    def _download_and_apply_update(self, asset_url):
+        self.after(0, self._log, "[INFO]  Downloading update...")
+        try:
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".tmp")
+            with requests.get(asset_url, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                total = int(r.headers.get("content-length", 0))
+                downloaded = 0
+                for chunk in r.iter_content(65536):
+                    if chunk:
+                        tmp.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            pct = int(downloaded / total * 100)
+                            self.after(0, self._set_progress, pct, f"Downloading update... {pct}%")
+            tmp.close()
+        except Exception as e:
+            self.after(0, self._log, f"[ERROR] Update download failed: {e}")
+            return
+
+        self.after(0, self._log, "[INFO]  Applying update and restarting...")
+        current_exe = sys.executable
+
+        if sys.platform == "win32":
+            bat = os.path.join(tempfile.gettempdir(), "aspiremcupdate.bat")
+            with open(bat, "w") as f:
+                f.write(
+                    f"@echo off\r\n"
+                    f"timeout /t 2 /nobreak > nul\r\n"
+                    f"move /y \"{tmp.name}\" \"{current_exe}\"\r\n"
+                    f"start \"\" \"{current_exe}\"\r\n"
+                    f"del \"%~f0\"\r\n"
+                )
+            subprocess.Popen(
+                ["cmd", "/c", bat],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                close_fds=True,
+            )
+            self.after(0, self.destroy)
+        else:
+            try:
+                os.chmod(tmp.name, 0o755)
+                os.replace(tmp.name, current_exe)
+                os.execv(current_exe, sys.argv)
+            except Exception as e:
+                self.after(0, self._log, f"[ERROR] Failed to apply update: {e}")
 
     def _finish(self, success):
         self._updating = False

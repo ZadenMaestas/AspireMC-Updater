@@ -12,11 +12,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact: AspireMC-Updater
+            artifact: AspireMC-Updater-linux
           - os: windows-latest
             artifact: AspireMC-Updater.exe
           - os: macos-latest
-            artifact: AspireMC-Updater
+            artifact: AspireMC-Updater-macos
 
     runs-on: ${{ matrix.os }}
 
@@ -36,6 +36,10 @@ jobs:
 
       - name: Build
         run: python build.py
+
+      - name: Rename binary (non-Windows)
+        if: runner.os != 'Windows'
+        run: mv dist/AspireMC-Updater dist/${{ matrix.artifact }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
