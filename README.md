@@ -1,5 +1,6 @@
 # AspireMC Updater
 [![Build](https://github.com/ZadenMaestas/AspireMC-Updater/actions/workflows/build.yml/badge.svg)](https://github.com/ZadenMaestas/AspireMC-Updater/actions/workflows/build.yml)
+#### v1.2.0
 
 A GUI tool for keeping your AspireMC modpack up to date. Downloads the latest mods from the server and installs them into your Minecraft mods folder, replacing whatever was there before.
 
