@@ -52,6 +52,10 @@ def _pyinstaller_cmd(python: str, windowed: bool) -> list[str]:
         "--name", APP_NAME,
         "--clean",
         "--noupx",
+        # boto3 is only used by the admin panel (developer-only, run from source).
+        # Excluding it keeps the end-user binary ~50 MB smaller.
+        "--exclude-module", "boto3",
+        "--exclude-module", "botocore",
     ]
     if windowed:
         cmd.append("--windowed")
