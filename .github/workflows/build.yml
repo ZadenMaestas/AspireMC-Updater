@@ -61,7 +61,7 @@ jobs:
       - name: Get app version
         id: appver
         run: |
-          VERSION=$(python3 -c "import re; m=re.search(r'APP_VERSION\s*=\s*[\"\']([\d.]+)', open('gui.py').read()); print(m.group(1))")
+          VERSION=$(python3 -c "import re; m=re.search(r'APP_VERSION\s*=\s*[\"\']([\d.]+)', open('aspireupdater/constants.py').read()); print(m.group(1))")
           echo "value=$VERSION" >> $GITHUB_OUTPUT
 
       - uses: actions/download-artifact@v4
