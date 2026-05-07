@@ -2,9 +2,11 @@ name: Build
 
 on:
   push:
+    branches:
+      - master
     tags:
-      - "v*"           # trigger on version tags like v1.0.0
-  workflow_dispatch:   # allow manual runs from the Actions tab
+      - "v*"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -49,12 +51,19 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Get app version
+        id: appver
+        run: |
+          VERSION=$(python3 -c "import re; m=re.search(r'APP_VERSION\s*=\s*[\"\']([\d.]+)', open('gui.py').read()); print(m.group(1))")
+          echo "value=$VERSION" >> $GITHUB_OUTPUT
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -63,4 +72,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-dev', steps.appver.outputs.value) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0} (latest build)', steps.appver.outputs.value) }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           files: dist/*

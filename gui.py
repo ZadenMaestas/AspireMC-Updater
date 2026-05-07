@@ -17,7 +17,7 @@ MODPACK_URL         = "https://pub-2259c298a3f444afb40f45083b29b3e0.r2.dev/Mods.
 MODPACK_VERSION_URL = "https://pub-2259c298a3f444afb40f45083b29b3e0.r2.dev/modpack_version.json"
 TARGET_VERSION      = "26.1.2"  # Minecraft version that autodetect searches for
 
-APP_VERSION  = "1.5.0"
+APP_VERSION  = "1.6.0"
 GITHUB_REPO  = "ZadenMaestas/AspireMC-Updater"
 
 
@@ -1140,19 +1140,27 @@ class App(tk.Tk):
 
     def _do_update_check(self):
         try:
-            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=10"
             r   = requests.get(url, timeout=10, headers={"Accept": "application/vnd.github+json"})
             r.raise_for_status()
-            data   = r.json()
-            latest = data["tag_name"]
-            if _parse_version(latest) > _parse_version(APP_VERSION):
-                asset_url  = None
-                asset_name = _get_release_asset_name()
-                for asset in data.get("assets", []):
-                    if asset["name"] == asset_name:
-                        asset_url = asset["browser_download_url"]
-                        break
-                self.after(0, self._prompt_update, latest.lstrip("v"), asset_url)
+            asset_name = _get_release_asset_name()
+            best_tag   = None
+            best_asset = None
+            best_ver   = _parse_version(APP_VERSION)
+            for rel in r.json():
+                tag = rel.get("tag_name", "")
+                ver = _parse_version(tag)
+                if ver > best_ver:
+                    best_ver  = ver
+                    best_tag  = tag
+                    best_asset = None
+                    for asset in rel.get("assets", []):
+                        if asset["name"] == asset_name:
+                            best_asset = asset["browser_download_url"]
+                            break
+            if best_tag:
+                self.after(0, self._prompt_update,
+                           best_tag.lstrip("v").split("-")[0], best_asset)
         except Exception:
             pass
 
